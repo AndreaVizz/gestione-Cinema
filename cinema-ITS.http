@@ -1,0 +1,37 @@
+@host = http://localhost:5066
+@json = application/json
+
+### Lista proiezioni
+GET {{host}}/proiezioni
+
+### Singola proiezione
+GET {{host}}/proiezioni/1
+
+### Crea proiezione
+POST {{host}}/proiezioni
+Content-Type: {{json}}
+
+{
+  "titolo": "Interstellar",
+  "durataMin": 169,
+  "genere": "Sci-Fi",
+  "nazionalita": "USA",
+  "lingua": "EN",
+  "descrizione": "Viaggio nello spazio-tempo",
+  "sala": "Sala 3",
+  "orarioInizio": "2025-09-12T21:00:00",
+  "postiTotali": 140,
+  "prezzo": 10.50
+}
+
+### Aggiorna (parziale) proiezione
+PUT {{host}}/proiezioni/1
+Content-Type: {{json}}
+
+{
+  "prezzo": 8.90,
+  "postiTotali": 130
+}
+
+### Elimina proiezione
+DELETE {{host}}/proiezioni/2

@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+.idea/
+*.log
+publish/
+*.pfx
+appsettings.*.local.json
