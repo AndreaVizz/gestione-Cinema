@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <title>Cinema — Proiezioni</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="container">
+    <div>
+      <h1>Proiezioni</h1>
+      <p class="muted">Lista, filtri, inserimento, modifica, eliminazione</p>
+    </div>
+    <nav>
+      <a class="active" href="proiezioni.html">Proiezioni</a>
+      <a href="biglietti.html">Biglietti</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2 id="form-title">Inserisci/Modifica Proiezione</h2>
+      <form id="form-proiezione" class="grid">
+        <input type="hidden" id="proiezione-id" />
+        <label> Titolo * <input id="titolo" required /></label>
+        <label> Durata (min) <input id="durataMin" type="number" min="1" /></label>
+
+        <label> Genere * 
+          <select id="genere"><option value="">—</option></select>
+        </label>
+        <label> Nazionalità * 
+          <select id="nazionalita"><option value="">—</option></select>
+        </label>
+        <label> Lingua * 
+          <select id="lingua"><option value="">—</option></select>
+        </label>
+
+        <label class="full"> Descrizione * <textarea id="descrizione" rows="2"></textarea></label>
+
+        <label> Sala * 
+          <select id="sala"><option value="">—</option></select>
+        </label>
+        <label> Orario inizio * <input id="orarioInizio" type="datetime-local" /></label>
+        <label> Posti totali <input id="postiTotali" type="number" min="1" value="100" /></label>
+        <label> Prezzo (€) <input id="prezzo" type="number" step="0.01" min="0" value="8.50" /></label>
+
+        <div class="actions full">
+          <button class="btn primary" type="submit">Salva</button>
+          <button class="btn" type="button" id="btn-reset-form">Annulla</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Elenco proiezioni</h2>
+        <div class="filters">
+          <select id="f-genere"><option value="">Tutti i generi</option></select>
+          <select id="f-lingua"><option value="">Tutte le lingue</option></select>
+          <button class="btn" id="btn-filtra">Filtra</button>
+          <button class="btn" id="btn-reset-filtri">Reset</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="tab-proiezioni">
+          <thead>
+            <tr>
+              <th>Titolo</th><th>Genere</th><th>Lingua</th><th>Sala</th>
+              <th>Inizio</th><th>Durata</th><th>Prezzo</th><th>Disp.</th><th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="api.js"></script>
+  <script src="proiezioni.js"></script>
+</body>
+</html>
