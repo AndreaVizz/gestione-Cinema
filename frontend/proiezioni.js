@@ -1,154 +1,156 @@
-(() => {
-  'use strict';
-  if (window.__proiezioniLoaded) return;
-  window.__proiezioniLoaded = true;
+// ===== API helper =====
+async function api(path, opts = {}) {
+  const res = await fetch(`http://localhost:5074${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
 
-  // NOTA: alias per evitare il conflitto con il const globale in api.js
-  const { ProiezioniApi: PApi, utils } = window.CinemaApi;
-  const {
-    $, toast, fmtMoney, fmtDate, toLocalInputValue, populateSelect, ready,
-    GENERI, LINGUE, NAZIONALITA, SALE
-  } = utils;
+// ===== Caricamento dropdown =====
+function populateSelect(id, values) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '<option value="">—</option>';
+  values.forEach(v => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
 
-  ready(async function init() {
-    // Select preimpostati
-    populateSelect('#genere', GENERI);
-    populateSelect('#lingua', LINGUE);
-    populateSelect('#nazionalita', NAZIONALITA);
-    populateSelect('#sala', SALE);
-    populateSelect('#f-genere', GENERI, { includeBlank: true, blankLabel: 'Tutti i generi' });
-    populateSelect('#f-lingua', LINGUE, { includeBlank: true, blankLabel: 'Tutte le lingue' });
+document.addEventListener("DOMContentLoaded", () => {
+  // 🔹 Lista generi ampliata
+  const generi = [
+    "Azione", "Avventura", "Animazione", "Anime", "Biografico",
+    "Commedia", "Crime", "Documentario", "Drammatico", "Famiglia",
+    "Fantasy", "Guerra", "Horror", "Musicale", "Mistero",
+    "Romantico", "Sci-Fi", "Sportivo", "Storico", "Thriller",
+    "Western"
+  ];
 
-    // Eventi
-    $('#btn-reset-form').addEventListener('click', resetForm);
-    $('#btn-filtra').addEventListener('click', () => loadProiezioni(readFiltri()));
-    $('#btn-reset-filtri').addEventListener('click', () => {
-      populateSelect('#f-genere', GENERI, { includeBlank: true, blankLabel: 'Tutti i generi' });
-      populateSelect('#f-lingua', LINGUE, { includeBlank: true, blankLabel: 'Tutte le lingue' });
-      loadProiezioni();
-    });
-    $('#form-proiezione').addEventListener('submit', onSubmit);
+  populateSelect("genere", generi);
+  populateSelect("nazionalita", ["ITA", "USA", "JP", "UK", "FR", "DE", "ES", "KR", "CN"]);
+  populateSelect("lingua", ["IT", "EN", "JP", "FR", "DE", "ES", "ZH", "KO"]);
+  populateSelect("sala", ["Sala 1", "Sala 2", "Sala 3"]);
 
+  populateSelect("filtro-genere", generi);
+  populateSelect("filtro-lingua", ["IT", "EN", "JP", "FR", "DE", "ES", "ZH", "KO"]);
+
+  // Carica tutto inizialmente
+  loadProiezioni();
+
+  // Gestione pulsanti filtri
+  document.getElementById("btn-filtra").addEventListener("click", () => {
+    const g = document.getElementById("filtro-genere").value;
+    const l = document.getElementById("filtro-lingua").value;
+    loadProiezioni({ genere: g, lingua: l });
+  });
+
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    document.getElementById("filtro-genere").value = "";
+    document.getElementById("filtro-lingua").value = "";
     loadProiezioni();
   });
+});
 
-  function readFiltri() {
-    const f = {};
-    const g = $('#f-genere').value;
-    const l = $('#f-lingua').value;
-    if (g) f.genere = g;
-    if (l) f.lingua = l;
-    return f;
-  }
+// ===== Caricamento proiezioni =====
+async function loadProiezioni(filtro = {}) {
+  const tbody = document.querySelector("#proiezioni-tbody");
+  tbody.innerHTML = "";
 
-  async function loadProiezioni(params = {}) {
-    try {
-      const data = await PApi.list(params);
-      renderProiezioni(data);
-    } catch (e) { toast(`Errore proiezioni: ${e.message}`, 'err'); }
-  }
+  try {
+    let proiezioni = await api("/proiezioni");
 
-  const tbody = document.querySelector('#tab-proiezioni tbody');
-  function renderProiezioni(list) {
-    tbody.innerHTML = '';
-    list.forEach(p => {
-      const disp = (p.postiTotali ?? 0) - (p.postiOccupati ?? 0);
-      const tr = document.createElement('tr');
+    console.log("Dati ricevuti dal backend:", proiezioni);
+
+    // Applica filtro lato client
+    if (filtro.genere) {
+      proiezioni = proiezioni.filter(p => p.genere === filtro.genere);
+    }
+    if (filtro.lingua) {
+      proiezioni = proiezioni.filter(p => p.lingua === filtro.lingua);
+    }
+
+    proiezioni.forEach(p => {
+      let postiDisponibili = "-";
+      if (p.postiTotali !== undefined && p.biglietti) {
+        postiDisponibili = p.postiTotali - p.biglietti.length;
+      }
+
+      const prezzoFormattato =
+        (p.prezzo !== undefined && p.prezzo !== null)
+          ? Number(p.prezzo).toFixed(2) + " €"
+          : "-";
+
+      const durataFormattata =
+        (p.durataMinuti !== undefined && p.durataMinuti !== null)
+          ? p.durataMinuti
+          : "-";
+
+      const tr = document.createElement("tr");
+      tr.dataset.id = p.id; // 👈 serve per i pulsanti
       tr.innerHTML = `
         <td>${p.titolo}</td>
-        <td><span class="badge">${p.genere || '—'}</span></td>
-        <td><span class="badge">${p.lingua || '—'}</span></td>
+        <td>${p.genere}</td>
+        <td>${p.lingua}</td>
         <td>${p.sala}</td>
-        <td>${fmtDate(p.orarioInizio)}</td>
-        <td>${p.durataMin || '—'}</td>
-        <td>${fmtMoney(p.prezzo)}</td>
-        <td>${disp}</td>
-        <td>
-          <a class="btn primary" href="biglietti.html?proiezioneId=${p.id}">Acquista</a>
-          <button class="btn" data-act="edit" data-id="${p.id}">Modifica</button>
-          <button class="btn danger" data-act="del" data-id="${p.id}">Elimina</button>
-        </td>`;
+        <td>${new Date(p.orarioInizio).toLocaleString()}</td>
+        <td>${durataFormattata}</td>
+        <td>${prezzoFormattato}</td>
+        <td>${postiDisponibili}</td>
+        <td class="actions">
+          <button class="btn">Modifica</button>
+          <button class="btn danger">Elimina</button>
+          <button class="btn success">Acquista</button>
+        </td>
+      `;
       tbody.appendChild(tr);
     });
+  } catch (err) {
+    console.error("Errore nel caricamento proiezioni:", err);
   }
+}
 
-  tbody.addEventListener('click', async (ev) => {
-    const btn = ev.target.closest('button[data-act]');
-    if (!btn) return;
-    const id = +btn.dataset.id;
-    const act = btn.dataset.act;
+// ===== Salvataggio proiezione =====
+const form = document.getElementById("form-proiezione");
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
 
-    if (act === 'edit') {
-      try {
-        const p = await PApi.get(id);
-        fillForm(p);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } catch (e) { toast(`Caricamento proiezione fallito: ${e.message}`, 'err'); }
-      return;
-    }
-    if (act === 'del') {
-      if (!confirm('Eliminare questa proiezione?')) return;
-      try {
-        await PApi.remove(id);
-        toast('Proiezione eliminata');
-        loadProiezioni(readFiltri());
-      } catch (e) { toast(e.message || 'Errore eliminazione (409 se ha biglietti acquistati)', 'err'); }
-    }
-  });
+  const data = {
+    titolo: form.titolo.value,
+    durataMinuti: parseInt(form.durataMinuti.value),
+    genere: form.genere.value,
+    nazionalita: form.nazionalita.value,
+    lingua: form.lingua.value,
+    descrizione: form.descrizione.value,
+    sala: form.sala.value,
+    orarioInizio: form.orarioInizio.value,
+    postiTotali: parseInt(form.postiTotali.value),
+    prezzo: parseFloat(form.prezzo.value)
+  };
 
-  function resetForm() {
-    $('#form-proiezione').reset();
-    $('#proiezione-id').value = '';
-    $('#form-title').textContent = 'Inserisci/Modifica Proiezione';
+  try {
+    await api("/proiezioni", {
+      method: "POST",
+      body: JSON.stringify(data)
+    });
+    form.reset();
+    loadProiezioni();
+  } catch (err) {
+    console.error("Errore salvataggio proiezione:", err);
   }
-  function fillForm(p) {
-    $('#proiezione-id').value   = p.id;
-    $('#titolo').value          = p.titolo || '';
-    $('#durataMin').value       = p.durataMin ?? '';
-    $('#genere').value          = p.genere || '';
-    $('#nazionalita').value     = p.nazionalita || '';
-    $('#lingua').value          = p.lingua || '';
-    $('#descrizione').value     = p.descrizione || '';
-    $('#sala').value            = p.sala || '';
-    $('#orarioInizio').value    = p.orarioInizio ? toLocalInputValue(p.orarioInizio) : '';
-    $('#postiTotali').value     = p.postiTotali ?? 100;
-    $('#prezzo').value          = p.prezzo ?? 8.5;
-  }
+});
 
-  async function onSubmit(ev) {
-    ev.preventDefault();
-    const id   = $('#proiezione-id').value;
+// ===== Solo gestione ACQUISTA =====
+document.querySelector("#proiezioni-tbody").addEventListener("click", (e) => {
+  const btn = e.target.closest("button.success");
+  if (!btn) return;
 
-    const titolo = $('#titolo').value.trim();
-    const genere = $('#genere').value;
-    const naz    = $('#nazionalita').value;
-    const lin    = $('#lingua').value;
-    const descr  = $('#descrizione').value.trim();
-    const sala   = $('#sala').value;
-    const orario = $('#orarioInizio').value;
+  const tr = btn.closest("tr");
+  const id = tr.dataset.id;
 
-    if (!titolo || !genere || !naz || !lin || !descr || !sala || !orario) {
-      toast('Compila tutti i campi obbligatori (*)', 'err'); return;
-    }
-
-    const dto = {
-      titolo,
-      durataMin: +($('#durataMin').value || 0),
-      genere,
-      nazionalita: naz,
-      lingua: lin,
-      descrizione: descr,
-      sala,
-      orarioInizio: new Date(orario).toISOString(),
-      postiTotali: +($('#postiTotali').value || 100),
-      prezzo: parseFloat($('#prezzo').value || '8.50')
-    };
-
-    try {
-      if (id) { await PApi.update(id, dto); toast('Proiezione aggiornata'); }
-      else    { await PApi.create(dto);     toast('Proiezione creata');    }
-      resetForm();
-      loadProiezioni(readFiltri());
-    } catch (e) { toast(`Salvataggio fallito: ${e.message}`, 'err'); }
-  }
-})();
+  // Reindirizza a biglietti.html con l'id della proiezione
+  window.location.href = `biglietti.html?proiezioneId=${id}`;
+});
