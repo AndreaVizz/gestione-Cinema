@@ -1,13 +1,13 @@
-@host = http://localhost:5066
+@host = http://localhost:5074
 @json = application/json
 
-### Lista proiezioni
+### PROIEZIONI ！ Lista
 GET {{host}}/proiezioni
 
-### Singola proiezione
+### PROIEZIONI ！ Singola
 GET {{host}}/proiezioni/1
 
-### Crea proiezione
+### PROIEZIONI ！ Crea
 POST {{host}}/proiezioni
 Content-Type: {{json}}
 
@@ -24,7 +24,7 @@ Content-Type: {{json}}
   "prezzo": 10.50
 }
 
-### Aggiorna (parziale) proiezione
+### PROIEZIONI ！ Aggiorna (parziale)
 PUT {{host}}/proiezioni/1
 Content-Type: {{json}}
 
@@ -33,5 +33,42 @@ Content-Type: {{json}}
   "postiTotali": 130
 }
 
-### Elimina proiezione
+### PROIEZIONI ！ Elimina
 DELETE {{host}}/proiezioni/2
+
+
+# ==========================
+#     BIGLIETTI
+# ==========================
+
+### BIGLIETTI ！ Lista
+GET {{host}}/biglietti
+
+### BIGLIETTI ！ Acquista (prenotazione)
+POST {{host}}/biglietti/acquista
+Content-Type: {{json}}
+
+{
+  "proiezioneId": 1,
+  "fila": "B",
+  "numero": 7
+}
+
+### BIGLIETTI ！ Dettaglio (sostituisci 1 con l'Id reale)
+GET {{host}}/biglietti/1
+
+### BIGLIETTI ！ Acquisto stesso posto (atteso 409 Conflict)
+POST {{host}}/biglietti/acquista
+Content-Type: {{json}}
+
+{
+  "proiezioneId": 1,
+  "fila": "B",
+  "numero": 7
+}
+
+### PROIEZIONI ！ Elimina con biglietti esistenti (atteso 409 Conflict)
+DELETE {{host}}/proiezioni/1
+
+### BIGLIETTI ！ Cancella biglietto (sostituisci 1 con l'Id reale)
+DELETE {{host}}/biglietti/1

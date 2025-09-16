@@ -1,91 +1,228 @@
-using cinema_ITS.Classi;
+ï»¿using cinema_ITS.Classi;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// CORS come fatto in classe
-builder.Services.AddCors(options =>
+// CORS
+builder.Services.AddCors(opt =>
 {
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    opt.AddPolicy("frontend", p => p
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .SetIsOriginAllowed(_ => true)
+        .AllowCredentials());
 });
+
+// DbContext SQLite
+var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<CinemaDbContext>(opt => opt.UseSqlite(connStr));
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
-app.UseCors("AllowAll");
 
-// ====== DATI IN-MEMORY ======
-List<Proiezione> proiezioni = new()
+app.UseCors("frontend");
+
+// Seed iniziale
+using (var scope = app.Services.CreateScope())
 {
-    new Proiezione{
-        Id = 1, Titolo = "Inception", DurataMin = 148, Genere = "Sci-Fi",
-        Nazionalita = "USA", Lingua = "EN", Descrizione = "Sogni nel sogno",
-        Sala = "Sala 1", OrarioInizio = DateTime.Today.AddHours(21),
-        PostiTotali = 120, Prezzo = 9.50m
-    },
-    new Proiezione{
-        Id = 2, Titolo = "La vita ¨¨ bella", DurataMin = 116, Genere = "Drammatico",
-        Nazionalita = "ITA", Lingua = "IT", Descrizione = "Storia toccante",
-        Sala = "Sala 2", OrarioInizio = DateTime.Today.AddDays(1).AddHours(18),
-        PostiTotali = 80, Prezzo = 7.50m
+    var db = scope.ServiceProvider.GetRequiredService<CinemaDbContext>();
+    db.Database.Migrate();
+
+    if (!db.Proiezioni.Any())
+    {
+        db.Proiezioni.AddRange(
+            new Proiezione
+            {
+                Titolo = "Inception",
+                DurataMinuti = 148,
+                Genere = "Sci-Fi",
+                Nazionalita = "USA",
+                Lingua = "IT",
+                Descrizione = "Sogni dentro sogni.",
+                Sala = "Sala 1",
+                OrarioInizio = DateTime.Today.AddHours(21),
+                PostiTotali = 120,
+                Prezzo = 7.50m
+            },
+            new Proiezione
+            {
+                Titolo = "Your Name",
+                DurataMinuti = 106,
+                Genere = "Anime",
+                Nazionalita = "JP",
+                Lingua = "IT",
+                Descrizione = "Destini che si incrociano.",
+                Sala = "Sala 2",
+                OrarioInizio = DateTime.Today.AddHours(18),
+                PostiTotali = 100,
+                Prezzo = 6.50m
+            }
+        );
+        db.SaveChanges();
     }
-};
-int NextId() => proiezioni.Count == 0 ? 1 : proiezioni.Max(p => p.Id) + 1;
+}
 
-// ====== ENDPOINTS PROIEZIONI ======
-app.MapGet("/proiezioni", (string? genere, string? lingua) =>
+if (app.Environment.IsDevelopment())
 {
-    IEnumerable<Proiezione> q = proiezioni;
-    if (!string.IsNullOrWhiteSpace(genere))
-        q = q.Where(p => p.Genere.Equals(genere, StringComparison.OrdinalIgnoreCase));
-    if (!string.IsNullOrWhiteSpace(lingua))
-        q = q.Where(p => p.Lingua.Equals(lingua, StringComparison.OrdinalIgnoreCase));
-    return Results.Ok(q.OrderBy(p => p.OrarioInizio));
-});
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
-app.MapGet("/proiezioni/{id:int}", (int id) =>
+// ====== ENDPOINTS ======
+
+// Health
+app.MapGet("/health", () => Results.Ok(new { ok = true }));
+
+// PROIEZIONI
+app.MapGet("/proiezioni", async (CinemaDbContext db) =>
+    await db.Proiezioni.AsNoTracking().OrderBy(p => p.OrarioInizio).ToListAsync());
+
+app.MapGet("/proiezioni/{id:int}", async (int id, CinemaDbContext db) =>
 {
-    var p = proiezioni.FirstOrDefault(p => p.Id == id);
+    var p = await db.Proiezioni.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
     return p is null ? Results.NotFound() : Results.Ok(p);
 });
 
-app.MapPost("/proiezioni", (Proiezione dto) =>
+app.MapPost("/proiezioni", async (Proiezione p, CinemaDbContext db) =>
 {
-    if (string.IsNullOrWhiteSpace(dto.Titolo))
-        return Results.BadRequest("Titolo obbligatorio");
-    if (dto.OrarioInizio == default)
-        return Results.BadRequest("OrarioInizio obbligatorio");
-
-    dto.Id = NextId();
-    if (dto.PostiTotali <= 0) dto.PostiTotali = 100;
-    if (dto.Prezzo <= 0) dto.Prezzo = 8.50m;
-
-    proiezioni.Add(dto);
-    return Results.Created($"/proiezioni/{dto.Id}", dto);
+    db.Proiezioni.Add(p);
+    await db.SaveChangesAsync();
+    return Results.Created($"/proiezioni/{p.Id}", p);
 });
 
-app.MapPut("/proiezioni/{id:int}", (int id, Proiezione patch) =>
+app.MapPut("/proiezioni/{id:int}", async (int id, ProiezioneDto dto, CinemaDbContext db) =>
 {
-    var p = proiezioni.FirstOrDefault(p => p.Id == id);
+    var p = await db.Proiezioni.FindAsync(id);
     if (p is null) return Results.NotFound();
-
-    if (!string.IsNullOrWhiteSpace(patch.Titolo)) p.Titolo = patch.Titolo;
-    if (patch.DurataMin > 0) p.DurataMin = patch.DurataMin;
-    if (!string.IsNullOrWhiteSpace(patch.Genere)) p.Genere = patch.Genere;
-    if (!string.IsNullOrWhiteSpace(patch.Nazionalita)) p.Nazionalita = patch.Nazionalita;
-    if (!string.IsNullOrWhiteSpace(patch.Lingua)) p.Lingua = patch.Lingua;
-    if (!string.IsNullOrWhiteSpace(patch.Descrizione)) p.Descrizione = patch.Descrizione;
-    if (!string.IsNullOrWhiteSpace(patch.Sala)) p.Sala = patch.Sala;
-    if (patch.OrarioInizio != default) p.OrarioInizio = patch.OrarioInizio;
-    if (patch.Prezzo > 0) p.Prezzo = patch.Prezzo;
-    if (patch.PostiTotali > 0) p.PostiTotali = Math.Max(patch.PostiTotali, p.PostiOccupati);
-
+    dto.ApplyTo(p);
+    await db.SaveChangesAsync();
     return Results.Ok(p);
 });
 
-app.MapDelete("/proiezioni/{id:int}", (int id) =>
+app.MapDelete("/proiezioni/{id:int}", async (int id, CinemaDbContext db) =>
 {
-    var p = proiezioni.FirstOrDefault(p => p.Id == id);
+    var p = await db.Proiezioni.FindAsync(id);
     if (p is null) return Results.NotFound();
-    proiezioni.Remove(p);
+    db.Proiezioni.Remove(p);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+// BIGLIETTI
+app.MapGet("/biglietti", async (CinemaDbContext db) =>
+    await db.Biglietti
+        .Include(b => b.Proiezione)
+        .AsNoTracking()
+        .OrderByDescending(b => b.OrarioAcquisto)
+        .Select(b => new {
+            b.Id,
+            b.Codice,
+            b.OrarioAcquisto,
+            b.Fila,
+            b.NumeroPosto,
+            b.Costo,
+            ProiezioneId = b.ProiezioneId,
+            TitoloProiezione = b.Proiezione != null ? b.Proiezione.Titolo : "(eliminata)",
+            Sala = b.Proiezione != null ? b.Proiezione.Sala : "-",
+            OrarioInizio = b.Proiezione != null ? b.Proiezione.OrarioInizio : (DateTime?)null
+        })
+        .ToListAsync());
+
+app.MapGet("/proiezioni/{id:int}/biglietti", async (int id, CinemaDbContext db) =>
+    await db.Biglietti
+        .Include(b => b.Proiezione)
+        .AsNoTracking()
+        .Where(b => b.ProiezioneId == id)
+        .Select(b => new {
+            b.Id,
+            b.Codice,
+            b.OrarioAcquisto,
+            b.Fila,
+            b.NumeroPosto,
+            b.Costo,
+            ProiezioneId = b.ProiezioneId,
+            TitoloProiezione = b.Proiezione != null ? b.Proiezione.Titolo : "(eliminata)",
+            Sala = b.Proiezione != null ? b.Proiezione.Sala : "-",
+            OrarioInizio = b.Proiezione != null ? b.Proiezione.OrarioInizio : (DateTime?)null
+        })
+        .ToListAsync());
+
+app.MapPost("/biglietti", async (Biglietto b, CinemaDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(b.Codice))
+        b.Codice = Guid.NewGuid().ToString("N");
+    b.OrarioAcquisto = DateTime.UtcNow;
+
+    var proiezione = await db.Proiezioni.FindAsync(b.ProiezioneId);
+    if (proiezione is null) return Results.BadRequest("Proiezione inesistente.");
+
+    var occupied = await db.Biglietti.AnyAsync(x =>
+        x.ProiezioneId == b.ProiezioneId &&
+        x.Fila == b.Fila && x.NumeroPosto == b.NumeroPosto);
+    if (occupied) return Results.Conflict("Posto giÃ  occupato.");
+
+    b.Costo = proiezione.Prezzo;
+
+    db.Biglietti.Add(b);
+    await db.SaveChangesAsync();
+    return Results.Created($"/biglietti/{b.Id}", b);
+});
+
+app.MapPost("/biglietti/acquista", async (AcquistoBigliettoDto dto, CinemaDbContext db) =>
+{
+    var proiezione = await db.Proiezioni.FindAsync(dto.ProiezioneId);
+    if (proiezione is null) return Results.BadRequest("Proiezione inesistente.");
+
+    var occupied = await db.Biglietti.AnyAsync(x =>
+        x.ProiezioneId == dto.ProiezioneId &&
+        x.Fila == dto.Fila && x.NumeroPosto == dto.NumeroPosto);
+    if (occupied) return Results.Conflict("Posto giÃ  occupato.");
+
+    var b = new Biglietto
+    {
+        ProiezioneId = dto.ProiezioneId,
+        Fila = dto.Fila,
+        NumeroPosto = dto.NumeroPosto,
+        Costo = proiezione.Prezzo,
+        Codice = Guid.NewGuid().ToString("N"),
+        OrarioAcquisto = DateTime.UtcNow
+    };
+
+    db.Biglietti.Add(b);
+    await db.SaveChangesAsync();
+    return Results.Created($"/biglietti/{b.Id}", b);
+});
+
+app.MapGet("/biglietti/{id:int}", async (int id, CinemaDbContext db) =>
+{
+    var t = await db.Biglietti
+        .Include(b => b.Proiezione)
+        .AsNoTracking()
+        .FirstOrDefaultAsync(b => b.Id == id);
+
+    return t is null ? Results.NotFound() : Results.Ok(new
+    {
+        t.Id,
+        t.Codice,
+        t.OrarioAcquisto,
+        t.Fila,
+        t.NumeroPosto,
+        t.Costo,
+        ProiezioneId = t.ProiezioneId,
+        TitoloProiezione = t.Proiezione?.Titolo,
+        Sala = t.Proiezione?.Sala,
+        OrarioInizio = t.Proiezione?.OrarioInizio
+    });
+});
+
+app.MapDelete("/biglietti/{id:int}", async (int id, CinemaDbContext db) =>
+{
+    var t = await db.Biglietti.FindAsync(id);
+    if (t is null) return Results.NotFound();
+    db.Biglietti.Remove(t);
+    await db.SaveChangesAsync();
     return Results.NoContent();
 });
 
