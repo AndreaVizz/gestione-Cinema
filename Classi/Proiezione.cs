@@ -3,16 +3,20 @@
     public class Proiezione
     {
         public int Id { get; set; }
-        public string Titolo { get; set; } = null!;
-        public int DurataMin { get; set; } = 0;
+        public string Titolo { get; set; } = string.Empty;
+        public int DurataMinuti { get; set; }
         public string Genere { get; set; } = string.Empty;
-        public string Nazionalita { get; set; } = string.Empty;
-        public string Lingua { get; set; } = string.Empty;
-        public string Descrizione { get; set; } = string.Empty;
-        public string Sala { get; set; } = string.Empty;
+        public string? Nazionalita { get; set; }
+        public string? Lingua { get; set; }
+        public string? Descrizione { get; set; }
+        public string Sala { get; set; } = "Sala 1";
         public DateTime OrarioInizio { get; set; }
+
+        // 🔹 Campi nuovi
         public int PostiTotali { get; set; } = 100;
-        public int PostiOccupati { get; set; } = 0;
-        public decimal Prezzo { get; set; } = 8.50m;
+        public decimal Prezzo { get; set; } = 0;
+
+        public ICollection<Biglietto> Biglietti { get; set; } = new List<Biglietto>();
     }
 }
+
